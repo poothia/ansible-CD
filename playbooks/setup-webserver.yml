@@ -6,7 +6,7 @@
 # proxy, SELinux, and firewall — all without ever SSH-ing into the VM.
 
 - name: Provision RHEL 9 web server from scratch
-  hosts: webservers
+  hosts: all
   become: true
 
   vars:

@@ -14,7 +14,7 @@
 #   4. Verifies the app is healthy via /health endpoint
 
 - name: Deploy Flask web application
-  hosts: webservers
+  hosts: all
   become: true
 
   vars:
