@@ -13,4 +13,4 @@ app_group: aap-demo
 gunicorn_bind: "127.0.0.1:8080"
 
 # Webapp repository URL (override via extra_vars from EDA)
-repo_url: "https://github.com/OWNER/WEBAPP_REPO"
+repo_url: "https://github.com/poothia/demo-webapp.git"
