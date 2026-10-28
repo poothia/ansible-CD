@@ -1,0 +1,133 @@
+---
+# Playbook: Setup Web Server (one-time)
+#
+# Run this once on the RHEL VM(s) before the demo to install httpd,
+# Python 3, and configure the reverse proxy for the Flask app.
+# Can be executed as a separate job template or via ansible-playbook.
+
+- name: Setup RHEL web server for AAP demo
+  hosts: webservers
+  become: true
+
+  vars:
+    app_user: aap-demo
+    app_group: aap-demo
+    app_dir: /opt/aap-demo/app
+    venv_dir: /opt/aap-demo/venv
+    gunicorn_bind: "127.0.0.1:8080"
+
+  tasks:
+    # ── Install packages ──────────────────────────────────────────
+
+    - name: Install required packages
+      ansible.builtin.dnf:
+        name:
+          - httpd
+          - mod_proxy_html
+          - git
+          - python3
+          - python3-pip
+          - python3-devel
+        state: present
+
+    # ── Create application user ───────────────────────────────────
+
+    - name: Create app group
+      ansible.builtin.group:
+        name: "{{ app_group }}"
+        system: true
+        state: present
+
+    - name: Create app user
+      ansible.builtin.user:
+        name: "{{ app_user }}"
+        group: "{{ app_group }}"
+        system: true
+        shell: /sbin/nologin
+        home: /opt/aap-demo
+        create_home: true
+
+    # ── Create directories ────────────────────────────────────────
+
+    - name: Create application directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ app_user }}"
+        group: "{{ app_group }}"
+        mode: "0755"
+      loop:
+        - /opt/aap-demo
+        - "{{ app_dir }}"
+        - /var/log/aap-demo
+
+    # ── Configure httpd as reverse proxy ──────────────────────────
+
+    - name: Enable httpd proxy modules
+      ansible.builtin.lineinfile:
+        path: /etc/httpd/conf/httpd.conf
+        regexp: "^#?LoadModule {{ item }}"
+        line: "LoadModule {{ item }}"
+      loop:
+        - "proxy_module modules/mod_proxy.so"
+        - "proxy_http_module modules/mod_proxy_http.so"
+      notify: restart httpd
+
+    - name: Deploy httpd reverse proxy vhost config
+      ansible.builtin.template:
+        src: aap-demo-httpd.conf.j2
+        dest: /etc/httpd/conf.d/aap-demo.conf
+        mode: "0644"
+      notify: restart httpd
+
+    - name: Remove default welcome page
+      ansible.builtin.file:
+        path: /etc/httpd/conf.d/welcome.conf
+        state: absent
+      notify: restart httpd
+
+    # ── Enable and start httpd ────────────────────────────────────
+
+    - name: Ensure httpd is enabled and started
+      ansible.builtin.systemd:
+        name: httpd
+        enabled: true
+        state: started
+
+    # ── Configure SELinux for reverse proxy ───────────────────────
+
+    - name: Allow httpd to connect to backend (SELinux)
+      ansible.posix.seboolean:
+        name: httpd_can_network_connect
+        state: true
+        persistent: true
+      when: ansible_selinux.status == "enabled"
+
+    # ── Open firewall ─────────────────────────────────────────────
+
+    - name: Open firewall port 80 (http)
+      ansible.posix.firewalld:
+        service: http
+        permanent: true
+        immediate: true
+        state: enabled
+      when: ansible_facts.services['firewalld.service'] is defined
+
+    # ── Verify ────────────────────────────────────────────────────
+
+    - name: Report setup complete
+      ansible.builtin.debug:
+        msg: |
+          Server setup complete!
+            httpd:   running (port 80, reverse proxy to {{ gunicorn_bind }})
+            app dir: {{ app_dir }}
+            venv:    {{ venv_dir }}
+            user:    {{ app_user }}
+
+          Next: run the "Deploy Web App" job template to deploy the Flask app.
+
+  handlers:
+    - name: restart httpd
+      ansible.builtin.systemd:
+        name: httpd
+        state: restarted

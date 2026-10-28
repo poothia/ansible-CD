@@ -1,23 +1,29 @@
 # AAP Event-Driven CD Demo — Proof of Value
 
-A complete **Continuous Deployment** demo using **Ansible Automation Platform (AAP)**.
-Push a code change to GitHub and watch it deploy automatically to a RHEL VM — end to end.
+A complete **Build → Test → Deploy** pipeline using **Ansible Automation Platform (AAP)**.
+Push a code change to a Flask web app, GitHub Actions builds and tests it, then
+Event-Driven Ansible deploys it automatically to a RHEL VM — end to end.
 
 ## Architecture
 
 ```
-Developer ──> GitHub ──> GitHub Actions ──> EDA Controller ──> Automation Controller ──> RHEL VM (httpd)
-  (git push)             (webhook POST)     (rulebook match)   (job template run)       (page updated)
+Developer ──> GitHub ──> GitHub Actions ──────────> EDA Controller ──> Automation Controller ──> RHEL VM
+  (git push)             (build + test + webhook)   (rulebook match)   (job template run)       (Flask app updated)
 ```
 
 **Flow:**
 
-1. Developer edits `app/index.html` and pushes to `main`
+1. Developer edits the Flask app (e.g. `app/app.py`) and pushes to `main`
 2. GitHub Actions workflow fires (filtered to `app/**` changes)
-3. GitHub Actions sends a webhook POST to EDA Controller with commit metadata
-4. EDA rulebook matches the event and triggers the "Deploy Web App" job template
-5. Automation Controller runs the deploy playbook on the RHEL VM
-6. The web page updates live — visible in the browser
+3. GitHub Actions **builds** the app — installs Python deps, runs `pytest`
+4. If tests pass, it **packages** the app as a tarball artifact
+5. GitHub Actions sends a **webhook POST** to EDA Controller with commit metadata
+6. EDA rulebook matches the event and **triggers** the "Deploy Web App" job template
+7. Automation Controller runs the deploy playbook:
+   - Clones the repo on the RHEL VM
+   - Installs deps in a virtualenv
+   - Restarts Gunicorn behind httpd reverse proxy
+8. The web page updates live — visible in the browser
 
 ---
 
@@ -26,21 +32,63 @@ Developer ──> GitHub ──> GitHub Actions ──> EDA Controller ──> A
 ```
 AAP_NSE/
 ├── .github/workflows/
-│   └── notify-eda.yml              # GitHub Actions → EDA webhook
-├── app/
-│   └── index.html                  # The web app (change this during demo)
+│   └── notify-eda.yml                 # GitHub Actions: build, test, notify EDA
+├── app/                                # Flask web application
+│   ├── app.py                         # Main Flask app (change this during demo!)
+│   ├── wsgi.py                        # WSGI entry point for Gunicorn
+│   ├── config.py                      # App configuration
+│   ├── requirements.txt               # Python dependencies
+│   ├── templates/
+│   │   └── index.html                 # Jinja2 template
+│   ├── static/
+│   │   └── style.css                  # Stylesheet
+│   └── tests/
+│       └── test_app.py                # Pytest tests
 ├── playbooks/
-│   ├── deploy-webapp.yml           # Deploy playbook (triggered by EDA)
-│   └── setup-webserver.yml         # One-time httpd setup
+│   ├── deploy-webapp.yml              # Deploy playbook (triggered by EDA)
+│   ├── setup-webserver.yml            # One-time server setup
+│   └── templates/
+│       ├── aap-demo.service.j2        # Gunicorn systemd service
+│       └── aap-demo-httpd.conf.j2     # httpd reverse proxy config
 ├── rulebooks/
-│   └── github-webhook.yml          # EDA rulebook
+│   └── github-webhook.yml             # EDA rulebook
 ├── collections/
-│   └── requirements.yml            # Required Ansible collections
+│   └── requirements.yml               # Required Ansible collections
 ├── group_vars/
-│   └── webservers.yml              # Web server variables
+│   └── webservers.yml                 # Web server variables
 ├── inventory/
-│   └── hosts.yml                   # Reference inventory
-└── README.md                       # This file
+│   └── hosts.yml                      # Reference inventory
+└── README.md                          # This file
+```
+
+---
+
+## The Web App
+
+The demo app is a **Python Flask** application located in `app/`. It has:
+
+- **`app.py`** — the main Flask app with configurable title, version, subtitle, and theme color (these are the values you change during the demo)
+- **`templates/index.html`** — a Jinja2 template that renders a styled dashboard showing the pipeline stages, build metadata (commit SHA, build time, hostname), and Red Hat branding
+- **`static/style.css`** — the stylesheet
+- **`tests/test_app.py`** — pytest tests that verify the index page loads, contains the expected title/version, and the `/health` endpoint returns JSON
+- **`wsgi.py`** — the WSGI entry point used by Gunicorn in production
+
+### Running locally
+
+```bash
+cd app
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+python app.py
+# Open http://localhost:8080
+```
+
+### Running tests locally
+
+```bash
+cd app
+python -m pytest tests/ -v
 ```
 
 ---
@@ -74,7 +122,12 @@ Run the setup playbook once (either from Automation Controller or locally):
 ansible-playbook -i inventory/hosts.yml playbooks/setup-webserver.yml
 ```
 
-This installs `httpd`, opens port 80, and places a placeholder page.
+This will:
+- Install httpd, Python 3, pip, and git
+- Create an `aap-demo` system user
+- Configure httpd as a reverse proxy to Gunicorn (port 8080)
+- Set SELinux boolean for httpd network connect
+- Open firewall port 80
 
 ### Step 3: Configure Automation Controller
 
@@ -173,62 +226,88 @@ This installs `httpd`, opens port 80, and places a placeholder page.
 ### Pre-Demo Checklist
 
 - [ ] RHEL VM is running and httpd is serving on port 80
-- [ ] Automation Controller: project synced, job template exists
+- [ ] Run `setup-webserver.yml` has completed successfully
+- [ ] Automation Controller: project synced, job template `Deploy Web App` exists
 - [ ] EDA Controller: rulebook activation is **Enabled** (green status)
-- [ ] GitHub secrets are configured
+- [ ] GitHub secrets (`EDA_WEBHOOK_URL`, `EDA_WEBHOOK_TOKEN`) are configured
+- [ ] Initial deploy has been run once (so the app is live)
 - [ ] Browser tabs open: RHEL VM web page, GitHub Actions, EDA Controller, Automation Controller
 
 ### Demo Script
 
 **1. Show the current state**
-> Open the RHEL VM web page in a browser. Show the audience the current version.
+> Open the Flask app in a browser (`http://<RHEL_VM_IP>/`).
+> Point out the version number, build time, and commit SHA displayed on the page.
 
-**2. Make a visible change**
-> Open `app/index.html` in your editor. Change the heading text:
-> ```html
-> <!-- Before -->
-> <h1>Welcome to AAP Demo</h1>
-> <p class="version">VERSION 1.0 — Initial Deployment</p>
+**2. Show the code**
+> Open `app/app.py` in your editor. Show that it's a real Python application
+> with routes, templates, and tests — not just a static file.
+
+**3. Make a visible change**
+> Edit `app/app.py` — change the title, version, and theme color:
 >
-> <!-- After -->
-> <h1>Deployment v2.0 — Updated Live!</h1>
-> <p class="version">VERSION 2.0 — Deployed via Event-Driven Ansible</p>
+> ```python
+> # Before
+> APP_VERSION = "1.0.0"
+> APP_TITLE = "Welcome to AAP Demo"
+> APP_SUBTITLE = "Event-Driven Continuous Deployment"
+> THEME_COLOR = "#ee0000"
+>
+> # After
+> APP_VERSION = "2.0.0"
+> APP_TITLE = "Deployed Live via AAP!"
+> APP_SUBTITLE = "Build, Test & Deploy — Automated"
+> THEME_COLOR = "#0066cc"
 > ```
 
-**3. Push the change**
+**4. Push the change**
 ```bash
-git add app/index.html
-git commit -m "Update landing page to v2.0"
+git add app/app.py
+git commit -m "v2.0 - updated live during demo"
 git push
 ```
 
-**4. Watch the pipeline**
-> Switch between these tabs to show each stage firing:
-> 1. **GitHub Actions** — the workflow runs and sends the webhook
+**5. Watch the pipeline**
+> Switch between these tabs to show each stage:
+>
+> 1. **GitHub Actions** — the workflow runs:
+>    - Python deps installed
+>    - Tests pass ✅
+>    - App packaged as tarball
+>    - Webhook sent to EDA
 > 2. **EDA Controller** — the event appears in the rulebook activation history
-> 3. **Automation Controller** — the "Deploy Web App" job starts and completes
+> 3. **Automation Controller** — the "Deploy Web App" job starts and completes:
+>    - Clones repo at the new commit
+>    - Installs deps in virtualenv
+>    - Restarts Gunicorn
+>    - Health check passes
 
-**5. See the result**
-> Refresh the browser showing the RHEL VM web page. The updated heading is live!
+**6. See the result**
+> Refresh the browser showing the Flask app. The page now shows:
+> - New title and blue theme color
+> - Updated version number (2.0.0)
+> - New commit SHA and build time
 
-**6. Highlight the value**
-> - Total time: ~30-60 seconds from push to deploy
+**7. Highlight the value**
+> - End-to-end time: ~45-90 seconds from push to deploy
+> - The app was **built and tested** before deployment — broken code won't deploy
 > - Zero manual intervention
-> - Full audit trail: Git commit → GitHub Actions → EDA event → Controller job
-> - Extensible: add approval gates, notifications, multi-stage deployments
+> - Full audit trail: Git commit → Build/Test → EDA event → Controller job
+> - The `/health` endpoint confirms the app is running correctly
 
 ---
 
 ## Talking Points
 
-| Customer Concern              | AAP Answer                                                          |
-|-------------------------------|---------------------------------------------------------------------|
-| "We need faster deployments"  | Event-driven — deploys in seconds after push, not minutes/hours     |
-| "We need audit/compliance"    | Full traceability: commit SHA flows through every stage             |
-| "We use GitHub already"       | AAP integrates with existing CI/CD — no rip and replace             |
-| "What about approvals?"       | Add approval nodes in Controller workflows before deploy            |
-| "Can this scale?"             | AAP handles thousands of hosts; EDA processes events in real time   |
-| "What about rollback?"        | Git revert + push triggers the same pipeline — instant rollback     |
+| Customer Concern              | AAP Answer                                                              |
+|-------------------------------|-------------------------------------------------------------------------|
+| "We need faster deployments"  | Event-driven — builds, tests, and deploys in under 2 minutes            |
+| "How do we prevent bad code?" | GitHub Actions runs tests; only passing builds trigger EDA              |
+| "We need audit/compliance"    | Full traceability: commit SHA flows through build → EDA → deploy        |
+| "We use GitHub already"       | AAP integrates with existing CI/CD — no rip and replace                 |
+| "What about approvals?"       | Add approval nodes in Controller workflows before deploy                |
+| "Can this scale?"             | AAP handles thousands of hosts; EDA processes events in real time       |
+| "What about rollback?"        | Git revert + push triggers the same build/test/deploy pipeline          |
 
 ---
 
@@ -236,21 +315,25 @@ git push
 
 | Issue                                    | Fix                                                              |
 |------------------------------------------|------------------------------------------------------------------|
-| GitHub Actions fails with HTTP error     | Check `EDA_WEBHOOK_URL` secret — ensure EDA is reachable        |
+| GitHub Actions build fails               | Check `app/requirements.txt` and test output in Actions logs     |
+| GitHub Actions webhook fails             | Check `EDA_WEBHOOK_URL` secret — ensure EDA is reachable        |
 | EDA event not appearing                  | Check rulebook activation is enabled; check EDA controller logs  |
 | Job template not launching               | Verify Controller Token credential in EDA; check token scope     |
-| Playbook fails on RHEL VM               | Ensure SSH connectivity; run setup-webserver.yml first           |
-| Page not updating                        | Check httpd is running: `systemctl status httpd`                 |
+| Playbook fails: "pip not found"          | Run `setup-webserver.yml` first to install Python 3              |
+| App not responding after deploy          | Check Gunicorn: `systemctl status aap-demo`                      |
+| httpd returns 503                        | Gunicorn may not be running; check SELinux: `setsebool -P httpd_can_network_connect 1` |
+| Page not updating                        | Hard refresh browser (Ctrl+Shift+R); check `/health` endpoint   |
 
 ---
 
 ## Next Steps After the PoV
 
-- Add **approval workflows** (Controller workflow with an approval node)
-- Add **Slack/Teams notifications** on deploy success/failure
+- Add **approval workflows** (Controller workflow with an approval node before deploy)
+- Add **Slack/Teams notifications** on build failure or deploy success
 - Expand to **multi-environment** (dev → staging → prod) with separate inventories
-- Add **ServiceNow integration** for change tickets
+- Add **ServiceNow integration** for automatic change tickets
 - Add **Dynatrace/Datadog** events triggering auto-remediation via EDA
+- Containerize the app and deploy to **OpenShift** via AAP
 
 ---
 

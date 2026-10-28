@@ -1,0 +1,165 @@
+---
+# Playbook: Deploy Web App
+#
+# Triggered by EDA Controller via the "Deploy Web App" job template.
+# Receives extra_vars: repo_url, commit_sha, committer
+#
+# What it does:
+#   1. Clones the repo at the specified commit
+#   2. Installs Python dependencies into a virtualenv
+#   3. Sets build metadata (commit SHA, build time)
+#   4. Deploys the Flask app and restarts Gunicorn
+#   5. Verifies the app is healthy
+
+- name: Deploy Flask web application from GitHub
+  hosts: webservers
+  become: true
+
+  vars:
+    repo_url: "{{ repo_url | default('https://github.com/OWNER/AAP_NSE') }}"
+    commit_sha: "{{ commit_sha | default('main') }}"
+    committer: "{{ committer | default('automation') }}"
+    checkout_dir: /tmp/aap_nse_deploy
+    app_dir: /opt/aap-demo/app
+    venv_dir: /opt/aap-demo/venv
+    app_user: aap-demo
+    app_group: aap-demo
+    gunicorn_bind: "127.0.0.1:8080"
+
+  tasks:
+    - name: Display deployment info
+      ansible.builtin.debug:
+        msg: |
+          Deploying Flask web app...
+            Repo:      {{ repo_url }}
+            Commit:    {{ commit_sha }}
+            Triggered: {{ committer }}
+
+    # ── Clone the repository ──────────────────────────────────────
+
+    - name: Remove previous checkout
+      ansible.builtin.file:
+        path: "{{ checkout_dir }}"
+        state: absent
+
+    - name: Clone repository at specific commit
+      ansible.builtin.git:
+        repo: "{{ repo_url }}"
+        dest: "{{ checkout_dir }}"
+        version: "{{ commit_sha }}"
+        depth: 1
+        force: true
+
+    # ── Build: install dependencies ───────────────────────────────
+
+    - name: Ensure app directory exists
+      ansible.builtin.file:
+        path: "{{ app_dir }}"
+        state: directory
+        owner: "{{ app_user }}"
+        group: "{{ app_group }}"
+        mode: "0755"
+
+    - name: Copy application files
+      ansible.builtin.copy:
+        src: "{{ checkout_dir }}/app/"
+        dest: "{{ app_dir }}/"
+        remote_src: true
+        owner: "{{ app_user }}"
+        group: "{{ app_group }}"
+        mode: "0644"
+        directory_mode: "0755"
+
+    - name: Create Python virtual environment
+      ansible.builtin.command:
+        cmd: python3 -m venv {{ venv_dir }}
+        creates: "{{ venv_dir }}/bin/activate"
+
+    - name: Install Python dependencies
+      ansible.builtin.pip:
+        requirements: "{{ app_dir }}/requirements.txt"
+        virtualenv: "{{ venv_dir }}"
+        state: present
+
+    # ── Set build metadata ────────────────────────────────────────
+
+    - name: Write commit SHA metadata
+      ansible.builtin.copy:
+        content: "{{ commit_sha }}"
+        dest: "{{ app_dir }}/COMMIT_SHA"
+        owner: "{{ app_user }}"
+        group: "{{ app_group }}"
+        mode: "0644"
+
+    - name: Write build timestamp
+      ansible.builtin.copy:
+        content: "{{ ansible_date_time.iso8601 }}"
+        dest: "{{ app_dir }}/BUILD_TIME"
+        owner: "{{ app_user }}"
+        group: "{{ app_group }}"
+        mode: "0644"
+
+    # ── Deploy: Gunicorn systemd service ──────────────────────────
+
+    - name: Deploy Gunicorn systemd service
+      ansible.builtin.template:
+        src: aap-demo.service.j2
+        dest: /etc/systemd/system/aap-demo.service
+        mode: "0644"
+      notify:
+        - reload systemd
+        - restart aap-demo
+
+    - name: Set environment file for the service
+      ansible.builtin.copy:
+        content: |
+          COMMIT_SHA={{ commit_sha }}
+          BUILD_TIME={{ ansible_date_time.iso8601 }}
+        dest: /opt/aap-demo/env
+        owner: "{{ app_user }}"
+        group: "{{ app_group }}"
+        mode: "0644"
+      notify: restart aap-demo
+
+    # ── Flush handlers so the app is up before health check ───────
+
+    - name: Flush handlers
+      ansible.builtin.meta: flush_handlers
+
+    # ── Verify deployment ─────────────────────────────────────────
+
+    - name: Wait for app to be healthy
+      ansible.builtin.uri:
+        url: "http://{{ gunicorn_bind }}/health"
+        return_content: true
+        status_code: 200
+      register: health
+      retries: 5
+      delay: 2
+      until: health.status == 200
+
+    - name: Print deployment result
+      ansible.builtin.debug:
+        msg: |
+          Deployment successful!
+            Version: {{ health.json.version }}
+            URL:     http://{{ ansible_host }}/
+            Commit:  {{ commit_sha }}
+
+    # ── Cleanup ───────────────────────────────────────────────────
+
+    - name: Clean up checkout directory
+      ansible.builtin.file:
+        path: "{{ checkout_dir }}"
+        state: absent
+
+  handlers:
+    - name: reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: restart aap-demo
+      ansible.builtin.systemd:
+        name: aap-demo
+        state: restarted
+        enabled: true
