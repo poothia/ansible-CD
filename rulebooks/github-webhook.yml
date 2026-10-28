@@ -1,11 +1,9 @@
 ---
 # EDA Rulebook: GitHub CD Webhook Listener
 #
-# This rulebook listens for webhook events from GitHub Actions and
-# triggers the "Deploy Web App" job template on Automation Controller.
-#
-# Activated via: EDA Controller UI -> Rulebook Activations
-# Source plugin: ansible.eda.webhook (from the ansible.eda collection)
+# Listens for webhook events sent by the webapp's GitHub Actions workflow.
+# When an "App updated" event arrives, triggers the "Deploy Web App"
+# job template on Automation Controller.
 
 - name: Listen for GitHub CD events
   hosts: all

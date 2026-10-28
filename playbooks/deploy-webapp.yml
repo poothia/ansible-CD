@@ -1,25 +1,27 @@
 ---
 # Playbook: Deploy Web App
 #
-# Triggered by EDA Controller via the "Deploy Web App" job template.
+# Used in both demos:
+#   Demo 1 — chained after setup-webserver.yml via a Workflow Template
+#   Demo 2 — triggered automatically by EDA Controller
+#
 # Receives extra_vars: repo_url, commit_sha, committer
 #
 # What it does:
-#   1. Clones the repo at the specified commit
+#   1. Clones the webapp repo at the specified commit
 #   2. Installs Python dependencies into a virtualenv
-#   3. Sets build metadata (commit SHA, build time)
-#   4. Deploys the Flask app and restarts Gunicorn
-#   5. Verifies the app is healthy
+#   3. Deploys the Gunicorn systemd service
+#   4. Verifies the app is healthy via /health endpoint
 
-- name: Deploy Flask web application from GitHub
+- name: Deploy Flask web application
   hosts: webservers
   become: true
 
   vars:
-    repo_url: "{{ repo_url | default('https://github.com/OWNER/AAP_NSE') }}"
+    repo_url: "{{ repo_url | default('https://github.com/OWNER/WEBAPP_REPO') }}"
     commit_sha: "{{ commit_sha | default('main') }}"
     committer: "{{ committer | default('automation') }}"
-    checkout_dir: /tmp/aap_nse_deploy
+    checkout_dir: /tmp/webapp_deploy
     app_dir: /opt/aap-demo/app
     venv_dir: /opt/aap-demo/venv
     app_user: aap-demo
@@ -30,19 +32,19 @@
     - name: Display deployment info
       ansible.builtin.debug:
         msg: |
-          Deploying Flask web app...
+          Deploying web application...
             Repo:      {{ repo_url }}
             Commit:    {{ commit_sha }}
             Triggered: {{ committer }}
 
-    # ── Clone the repository ──────────────────────────────────────
+    # -- Clone the webapp repo --------------------------------------------
 
     - name: Remove previous checkout
       ansible.builtin.file:
         path: "{{ checkout_dir }}"
         state: absent
 
-    - name: Clone repository at specific commit
+    - name: Clone webapp repository at specific commit
       ansible.builtin.git:
         repo: "{{ repo_url }}"
         dest: "{{ checkout_dir }}"
@@ -50,7 +52,7 @@
         depth: 1
         force: true
 
-    # ── Build: install dependencies ───────────────────────────────
+    # -- Install application ----------------------------------------------
 
     - name: Ensure app directory exists
       ansible.builtin.file:
@@ -60,9 +62,9 @@
         group: "{{ app_group }}"
         mode: "0755"
 
-    - name: Copy application files
+    - name: Sync application files to app directory
       ansible.builtin.copy:
-        src: "{{ checkout_dir }}/app/"
+        src: "{{ checkout_dir }}/"
         dest: "{{ app_dir }}/"
         remote_src: true
         owner: "{{ app_user }}"
@@ -81,9 +83,9 @@
         virtualenv: "{{ venv_dir }}"
         state: present
 
-    # ── Set build metadata ────────────────────────────────────────
+    # -- Build metadata ---------------------------------------------------
 
-    - name: Write commit SHA metadata
+    - name: Write commit SHA
       ansible.builtin.copy:
         content: "{{ commit_sha }}"
         dest: "{{ app_dir }}/COMMIT_SHA"
@@ -99,7 +101,7 @@
         group: "{{ app_group }}"
         mode: "0644"
 
-    # ── Deploy: Gunicorn systemd service ──────────────────────────
+    # -- Gunicorn systemd service -----------------------------------------
 
     - name: Deploy Gunicorn systemd service
       ansible.builtin.template:
@@ -121,12 +123,10 @@
         mode: "0644"
       notify: restart aap-demo
 
-    # ── Flush handlers so the app is up before health check ───────
+    # -- Flush and verify -------------------------------------------------
 
     - name: Flush handlers
       ansible.builtin.meta: flush_handlers
-
-    # ── Verify deployment ─────────────────────────────────────────
 
     - name: Wait for app to be healthy
       ansible.builtin.uri:
@@ -135,20 +135,20 @@
         status_code: 200
       register: health
       retries: 5
-      delay: 2
+      delay: 3
       until: health.status == 200
 
     - name: Print deployment result
       ansible.builtin.debug:
         msg: |
           Deployment successful!
-            Version: {{ health.json.version }}
-            URL:     http://{{ ansible_host }}/
-            Commit:  {{ commit_sha }}
+            App version: {{ health.json.version }}
+            Live at:     http://{{ ansible_host }}/
+            Commit:      {{ commit_sha }}
 
-    # ── Cleanup ───────────────────────────────────────────────────
+    # -- Cleanup ----------------------------------------------------------
 
-    - name: Clean up checkout directory
+    - name: Clean up checkout
       ansible.builtin.file:
         path: "{{ checkout_dir }}"
         state: absent

@@ -12,5 +12,5 @@ app_group: aap-demo
 # Gunicorn binding (httpd reverse-proxies to this)
 gunicorn_bind: "127.0.0.1:8080"
 
-# GitHub repository URL (override via extra_vars from EDA)
-repo_url: "https://github.com/OWNER/AAP_NSE"
+# Webapp repository URL (override via extra_vars from EDA)
+repo_url: "https://github.com/OWNER/WEBAPP_REPO"
