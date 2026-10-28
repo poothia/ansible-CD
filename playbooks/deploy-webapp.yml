@@ -18,7 +18,7 @@
   become: true
 
   vars:
-    repo_url: "{{ repo_url | default('https://github.com/poothia/demo-webapp.git') }}"
+    repo_url: "https://github.com/poothia/demo-webapp.git"
     commit_sha: "{{ commit_sha | default('main') }}"
     committer: "{{ committer | default('automation') }}"
     checkout_dir: /tmp/webapp_deploy
