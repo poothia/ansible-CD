@@ -18,7 +18,7 @@
       action:
         run_job_template:
           name: "Deploy Web App"
-          organization: "Default"
+          organization: "Ansible Product Demos (APD)"
           job_args:
             extra_vars:
               commit_sha: "{{ event.payload.commit_sha }}"
