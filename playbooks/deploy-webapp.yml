@@ -19,8 +19,8 @@
 
   vars:
     repo_url: "https://github.com/poothia/demo-webapp.git"
-    # commit_sha: "{{ commit_sha | default('main') }}"
-    # committer: "{{ committer | default('automation') }}"
+    commit_sha: "main"
+    committer: "automation"
     checkout_dir: /tmp/webapp_deploy
     app_dir: /opt/aap-demo/app
     venv_dir: /opt/aap-demo/venv
