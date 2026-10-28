@@ -16,14 +16,14 @@ automatically deploys it. The page updates on its own."
 | Browser — AAP Controller | Jobs page (to watch the deploy job appear) |
 | Browser — EDA Controller | Rulebook Activations page |
 | Browser — GitHub Actions | The webapp repo's Actions tab |
-| Browser — VM | `http://<RHEL9_VM_IP>/` showing the live app (from Demo 1) |
+| Browser — VM | `http://rhel9.sjwnx.sandbox1063.opentlc.com/` showing the live app (from Demo 1) |
 | Editor | The webapp repo cloned locally, with `app.py` open |
 
 ---
 
 ## Pre-Demo Setup (do this before the audience arrives)
 
-1. Demo 1 has been completed — the app is running on the RHEL 9 VM
+1. Demo 1 has been completed — the app is running on `rhel9.sjwnx.sandbox1063.opentlc.com`
 2. The `aap-automation` repo is pushed to GitHub
 3. The `webapp` repo is cloned locally on your laptop
 4. You have access to the EDA Controller UI
@@ -38,8 +38,8 @@ automatically deploys it. The page updates on its own."
 > Event-Driven Ansible so that any code change automatically triggers a
 > deployment — without anyone touching the AAP portal."
 
-**Action:** Show the live app in the browser. Point out the current version
-(1.0.0).
+**Action:** Show the live app at `http://rhel9.sjwnx.sandbox1063.opentlc.com/`.
+Point out the current version (1.0.0).
 
 ---
 
@@ -106,8 +106,9 @@ automatically deploys it. The page updates on its own."
    https://<EDA_CONTROLLER_HOST>/api/eda/v1/external_webhook/<ACTIVATION_ID>/
    ```
 
-> **Tip:** If EDA Controller is not publicly reachable, set up ngrok or a
-> reverse proxy before the demo and pre-configure the URL in GitHub Secrets.
+> **Tip:** If EDA Controller is not publicly reachable from GitHub, set up
+> ngrok or a reverse proxy before the demo and pre-configure the URL in
+> GitHub Secrets.
 
 ---
 
@@ -221,8 +222,9 @@ it:
    > restarting the app... health check passed."
 
    **Tab 4 — VM Browser:**
-   > "And now..." *refresh the page* "...the page is updated. New title, new
-   > color, new version. Deployed automatically in about 60 seconds."
+   > "And now..." *refresh `http://rhel9.sjwnx.sandbox1063.opentlc.com/`*
+   > "...the page is updated. New title, new color, new version. Deployed
+   > automatically in about 60 seconds."
 
 ---
 
@@ -269,7 +271,7 @@ Automation Controller: Job Template "Deploy Web App"
   - Playbook: deploy-webapp.yml
     |
     v
-RHEL 9 VM:
+RHEL 9 VM (rhel9.sjwnx.sandbox1063.opentlc.com):
   - git clone webapp repo @ commit_sha
   - pip install in virtualenv
   - Restart Gunicorn systemd service
@@ -284,7 +286,7 @@ RHEL 9 VM:
 | Problem | Quick Fix |
 |---|---|
 | GitHub Actions doesn't trigger | Check the branch is `main` and the changed file matches the path filter |
-| Webhook returns HTTP error | Check `EDA_WEBHOOK_URL` secret is correct; verify EDA is reachable |
+| Webhook returns HTTP error | Check `EDA_WEBHOOK_URL` secret is correct; verify EDA is reachable from GitHub |
 | EDA event not showing | Check rulebook activation is enabled (green); check EDA logs |
 | Controller job doesn't start | Verify the Controller Token has write scope; check EDA credential config |
 | App not updating | Check Gunicorn service: `systemctl status aap-demo` (via Controller ad-hoc command) |

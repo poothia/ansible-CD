@@ -13,7 +13,7 @@ VM. Not once."
 | Tab / Window | What |
 |---|---|
 | Browser — AAP | Automation Controller dashboard |
-| Browser — VM  | `http://<RHEL9_VM_IP>/` (will show error initially — that is the point) |
+| Browser — VM  | `http://rhel9.sjwnx.sandbox1063.opentlc.com/` (will show error initially — that is the point) |
 | Browser — GitHub | The webapp repo (to show the code exists) |
 
 ---
@@ -22,8 +22,8 @@ VM. Not once."
 
 1. Push the `webapp/` folder as its own GitHub repo (e.g. `github.com/<YOU>/demo-webapp`)
 2. Push the `aap-automation/` folder as its own GitHub repo (e.g. `github.com/<YOU>/aap-automation`)
-3. Ensure the RHEL 9 VM is freshly provisioned and reachable via SSH from the AAP Controller
-4. Ensure you have SSH credentials (key-based) for the RHEL 9 VM
+3. Ensure the RHEL 9 VM (`rhel9.sjwnx.sandbox1063.opentlc.com`) is freshly provisioned and reachable via SSH from the AAP Controller
+4. Ensure you have SSH credentials (key-based) for `lab-user` on the VM
 
 ---
 
@@ -35,8 +35,8 @@ VM. Not once."
 > GitHub — a Python Flask app with tests. And we have a brand new RHEL 9 VM
 > that has never been touched. Let me show you."
 
-**Action:** Show the webapp GitHub repo. Show the VM URL returning an error
-(nothing is installed yet).
+**Action:** Show the webapp GitHub repo. Show `http://rhel9.sjwnx.sandbox1063.opentlc.com/`
+returning an error (nothing is installed yet).
 
 ---
 
@@ -51,13 +51,14 @@ VM. Not once."
 2. Create **Machine Credential**:
    - Name: `RHEL 9 Demo VM`
    - Credential Type: Machine
-   - Username: `<your SSH user>`
+   - Username: `lab-user`
    - SSH Private Key: paste your private key
+   - Privilege Escalation Method: sudo
    - Click **Save**
 3. Create **Source Control Credential** (if repos are private):
    - Name: `GitHub SCM`
    - Credential Type: Source Control
-   - Username: `<your GitHub user>`
+   - Username: your GitHub username
    - Password / Token: paste GitHub PAT
    - Click **Save**
 
@@ -86,7 +87,7 @@ VM. Not once."
 
 ### Step 4 — Create the Inventory
 
-> **Say:** "Next I tell AAP about our target VM. Just the IP address and
+> **Say:** "Next I tell AAP about our target VM. Just the FQDN and
 > which user to connect as."
 
 **Action:**
@@ -97,8 +98,8 @@ VM. Not once."
    - Name: `rhel9-demo`
    - Variables:
      ```yaml
-     ansible_host: <YOUR_RHEL9_VM_IP>
-     ansible_user: <YOUR_SSH_USER>
+     ansible_host: rhel9.sjwnx.sandbox1063.opentlc.com
+     ansible_user: lab-user
      ```
    - Click **Save**
 4. Go to **Groups** tab --> **Add**:
@@ -182,7 +183,7 @@ VM. Not once."
    the real-time output in the Controller UI.
 
 4. When the workflow completes (green checkmark), switch to the browser tab
-   showing `http://<RHEL9_VM_IP>/`
+   showing `http://rhel9.sjwnx.sandbox1063.opentlc.com/`
 
 5. **Refresh the page.** The web app is live.
 

@@ -31,6 +31,16 @@ Developer pushes code
 
 ---
 
+## Target Environment
+
+| Resource | Details |
+|---|---|
+| RHEL 9 VM | `rhel9.sjwnx.sandbox1063.opentlc.com` |
+| SSH User | `lab-user` |
+| Private IP | `192.168.0.81` (not used directly — access via FQDN) |
+
+---
+
 ## What's in This Repo
 
 | Path | Purpose |
@@ -50,7 +60,7 @@ Developer pushes code
 ## Prerequisites
 
 - **Ansible Automation Platform** with Automation Controller and EDA Controller
-- A **RHEL 9 VM** reachable via SSH from the Automation Controller
+- RHEL 9 VM at `rhel9.sjwnx.sandbox1063.opentlc.com` reachable via SSH from the Controller
 - **Two GitHub repos**: one for this automation code, one for the webapp
 - Network path from GitHub to EDA Controller (public IP, reverse proxy, or ngrok)
 
@@ -81,10 +91,10 @@ event-driven automation
 
 | Object | Name | Details |
 |---|---|---|
-| Credential | `RHEL 9 Demo VM` | Machine type, SSH key for the RHEL 9 VM |
+| Credential | `RHEL 9 Demo VM` | Machine type, `lab-user` + SSH key |
 | Credential | `GitHub SCM` | Source Control type, GitHub PAT |
 | Project | `AAP Automation` | Points to this repo |
-| Inventory | `Demo Inventory` | One host (rhel9-demo) in group `webservers` |
+| Inventory | `Demo Inventory` | Host `rhel9-demo` (`rhel9.sjwnx.sandbox1063.opentlc.com`) in group `webservers` |
 | Job Template | `Setup Web Server` | Uses `playbooks/setup-webserver.yml` |
 | Job Template | `Deploy Web App` | Uses `playbooks/deploy-webapp.yml`, extra vars on launch |
 | Workflow Template | `Provision & Deploy` | Chains Setup --> Deploy (Demo 1) |
@@ -103,16 +113,6 @@ event-driven automation
 |---|---|
 | `EDA_WEBHOOK_URL` | EDA Controller webhook endpoint URL |
 | `EDA_WEBHOOK_TOKEN` | Bearer token for webhook auth |
-
----
-
-## Customization
-
-Before running the demo, update these placeholders:
-
-- `inventory/hosts.yml` — replace `192.168.1.100` with your RHEL 9 VM IP
-- `group_vars/webservers.yml` — replace `OWNER/WEBAPP_REPO` with your webapp GitHub repo
-- `playbooks/deploy-webapp.yml` — the `repo_url` default (line 20) should match your webapp repo
 
 ---
 

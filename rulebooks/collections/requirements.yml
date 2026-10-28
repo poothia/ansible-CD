@@ -1,4 +1,0 @@
----
-collections:
-  - name: ansible.eda
-  - name: ansible.posix
