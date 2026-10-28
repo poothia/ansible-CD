@@ -1,0 +1,8 @@
+---
+# Variables for the webservers group
+
+# Web server document root
+web_root: /var/www/html
+
+# GitHub repository URL (override via extra_vars from EDA)
+repo_url: "https://github.com/OWNER/AAP_NSE"

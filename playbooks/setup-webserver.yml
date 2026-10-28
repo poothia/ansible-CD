@@ -1,0 +1,56 @@
+---
+# Playbook: Setup Web Server (one-time)
+#
+# Run this once on the RHEL VM(s) before the demo to install and
+# configure httpd. Can be executed as a separate job template in
+# Automation Controller or run ad-hoc with ansible-playbook.
+
+- name: Setup RHEL web server for demo
+  hosts: webservers
+  become: true
+
+  tasks:
+    - name: Install httpd
+      ansible.builtin.dnf:
+        name:
+          - httpd
+          - git
+        state: present
+
+    - name: Ensure httpd is enabled and started
+      ansible.builtin.systemd:
+        name: httpd
+        enabled: true
+        state: started
+
+    - name: Open firewall port 80 (http)
+      ansible.posix.firewalld:
+        service: http
+        permanent: true
+        immediate: true
+        state: enabled
+      when: ansible_facts.services['firewalld.service'] is defined
+
+    - name: Create a placeholder index page
+      ansible.builtin.copy:
+        content: |
+          <html>
+          <body style="background:#151515;color:#fff;font-family:sans-serif;text-align:center;padding-top:20%;">
+            <h1>Web server is ready. Waiting for first deployment...</h1>
+          </body>
+          </html>
+        dest: /var/www/html/index.html
+        owner: apache
+        group: apache
+        mode: "0644"
+
+    - name: Verify httpd is responding
+      ansible.builtin.uri:
+        url: "http://localhost/"
+        return_content: false
+        status_code: 200
+      register: httpd_check
+
+    - name: Report status
+      ansible.builtin.debug:
+        msg: "httpd is running and responding on port 80. Ready for demo!"

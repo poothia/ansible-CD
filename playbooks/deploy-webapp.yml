@@ -1,0 +1,74 @@
+---
+# Playbook: Deploy Web App
+#
+# Triggered by EDA Controller via the "Deploy Web App" job template.
+# Receives extra_vars: repo_url, commit_sha, committer
+#
+# What it does:
+#   1. Clones the repo at the specified commit
+#   2. Copies app/index.html to the httpd document root
+#   3. Reloads httpd to pick up any config changes
+#   4. Prints the deployed URL for verification
+
+- name: Deploy web application from GitHub
+  hosts: webservers
+  become: true
+
+  vars:
+    repo_url: "{{ repo_url | default('https://github.com/OWNER/AAP_NSE') }}"
+    commit_sha: "{{ commit_sha | default('main') }}"
+    committer: "{{ committer | default('automation') }}"
+    app_src: /tmp/aap_nse_deploy
+    web_root: /var/www/html
+
+  tasks:
+    - name: Display deployment info
+      ansible.builtin.debug:
+        msg: |
+          Deploying web app...
+            Repo:      {{ repo_url }}
+            Commit:    {{ commit_sha }}
+            Triggered: {{ committer }}
+
+    - name: Ensure git is installed
+      ansible.builtin.dnf:
+        name: git
+        state: present
+
+    - name: Remove previous checkout
+      ansible.builtin.file:
+        path: "{{ app_src }}"
+        state: absent
+
+    - name: Clone repository at specific commit
+      ansible.builtin.git:
+        repo: "{{ repo_url }}"
+        dest: "{{ app_src }}"
+        version: "{{ commit_sha }}"
+        depth: 1
+        force: true
+
+    - name: Copy index.html to web root
+      ansible.builtin.copy:
+        src: "{{ app_src }}/app/index.html"
+        dest: "{{ web_root }}/index.html"
+        remote_src: true
+        owner: apache
+        group: apache
+        mode: "0644"
+      notify: reload httpd
+
+    - name: Clean up checkout
+      ansible.builtin.file:
+        path: "{{ app_src }}"
+        state: absent
+
+    - name: Print deployed URL
+      ansible.builtin.debug:
+        msg: "Deployment complete! Visit http://{{ ansible_host }}/ to see the updated page."
+
+  handlers:
+    - name: reload httpd
+      ansible.builtin.systemd:
+        name: httpd
+        state: reloaded
