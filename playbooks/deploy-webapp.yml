@@ -72,6 +72,10 @@
         mode: "0644"
         directory_mode: "0755"
 
+    - name: Fix app directory permissions
+      ansible.builtin.command:
+        cmd: find {{ app_dir }} -type d -exec chmod 0755 {} +
+
     - name: Create Python virtual environment
       ansible.builtin.command:
         cmd: python3 -m venv {{ venv_dir }}
@@ -82,6 +86,14 @@
         requirements: "{{ app_dir }}/requirements.txt"
         virtualenv: "{{ venv_dir }}"
         state: present
+
+    - name: Fix venv ownership
+      ansible.builtin.file:
+        path: "{{ venv_dir }}"
+        state: directory
+        recurse: true
+        owner: "{{ app_user }}"
+        group: "{{ app_group }}"
 
     # -- Build metadata ---------------------------------------------------
 
