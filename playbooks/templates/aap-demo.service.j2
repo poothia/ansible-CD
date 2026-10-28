@@ -3,7 +3,7 @@ Description=Demo Web App (Gunicorn)
 After=network.target
 
 [Service]
-Type=notify
+Type=simple
 User={{ app_user }}
 Group={{ app_group }}
 WorkingDirectory={{ app_dir }}
